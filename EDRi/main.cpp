@@ -37,7 +37,7 @@ TRACELOGGING_DEFINE_PROVIDER(
 std::vector<int> g_newly_hooked_procs = std::vector<int>{};
 std::vector<ProcInfo> g_running_procs = std::vector<ProcInfo>{};
 std::vector<std::string> g_exes_to_track = {
-    "smartscreen.exe", "System"
+    "smartscreen.exe", "System", "EDRi"
 };
 
 // attack exe paths
