@@ -150,7 +150,7 @@ Classifier filter_kernel_api_call(json& ev) {
 Classifier filter_kernel_file(json& ev) {
     if (std::find(kfile_event_ids_with_pid.begin(), kfile_event_ids_with_pid.end(), ev[EVENT_ID]) != kfile_event_ids_with_pid.end()) {
         return classify_to(ev, PID, TrackedProcs);
-    }
+    } // TODO, EDRi.exe storing the attack.exe must be minimal! Add EDRi to tracked_procs (warning other filters are affected)? Add a check here if attack.exe is affected?
     return Relevant; // put event ids without a filter into relevant
 }
 
