@@ -20,7 +20,7 @@ static const std::vector<int> am_event_ids_with_opid = { 5, 6, 11, 15, 16, 26, 2
 // TODO filter 5,6 (stream scan request start, stop) based on filepath == C:\Users\Public\Downloads\attack.exe
 static const std::vector<int> am_event_ids_with_pid_but_noisy = { 11, 111, 112 };
 static const std::vector<int> am_event_ids_with_opid_and_tpid = { 53 };
-static const std::vector<int> am_event_ids_with_pid_in_data = { 43, 67 };
+static const std::vector<int> am_event_ids_with_pid_in_data = { 43, 67 }; // TODO name == C:\Users\Public\Downloads\attack.exe, also name merge into -> filepath
 static const std::vector<int> am_event_ids_with_message = { 3 };
 static const std::vector<int> am_event_ids_with_filepath = { 7, 30, 31, 35, 36, 37, 38 };
 static const std::vector<int> am_event_ids_with_pipe = { 32, 33 };
