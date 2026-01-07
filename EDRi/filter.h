@@ -16,7 +16,8 @@ static const std::string CLASSIFIER_NOT_CONTAINED = "0";
 // -------------------- FILTERING LISTS -------------------- //
 // Antimalware Trace
 static const std::vector<int> am_event_ids_to_remove = { };
-// TODO filter event 1 on "first resource path" == C:\Users\Public\Downloads\attack.exe, and merge "first resource path" into filepath
+// TODO filter event 1 on "first resource path" == C:\Users\Public\Downloads\attack.exe, and merge "first resource path" into filepath, when "first resource type" == "file"
+// TODO event 1 can also be "first resource type" == "process", then merge into target_pid 
 static const std::vector<int> am_event_ids_with_opid = { 5, 6, 11, 15, 16, 26, 29, 104, 105, 109, 110, 111, 112, 60, 70, 71, 72, 73 };
 // TODO filter 5,6 (stream scan request start, stop) based on filepath == C:\Users\Public\Downloads\attack.exe
 static const std::vector<int> am_event_ids_with_pid_but_noisy = { 11, 111, 112 };
