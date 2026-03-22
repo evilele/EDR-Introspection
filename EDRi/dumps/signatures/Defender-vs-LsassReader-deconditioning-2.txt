@@ -1,0 +1,5 @@
+Found signal/signature: #Lowfi:Lua:WrittenToDownloadFolderByOtherParentProcess for "C:\Users\Public\Downloads\attack-284.exe"
+Found signal/signature: SLF:Win32/LsassMemDump.A for "C:\Users\Public\Downloads\l.dmp"
+Found signal/signature: SLF:Win32/LsassMemDump.C for "C:\Users\Public\Downloads\l.dmp"
+Found signal/signature: SLF:Win32/LsassMemDump.A for "C:\Users\Public\Downloads\l.dmp"
+Found signal/signature: SLF:Win32/LsassMemDump.C for "C:\Users\Public\Downloads\l.dmp"
