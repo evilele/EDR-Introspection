@@ -31,15 +31,18 @@ see /attacks/
 | C2 Loader   |         153 |           24 |    288 |        1283 |  1767 |
 | Lsass Read  |        1526 |            8 |     53 |         169 |  1780 |
 
-### Events at Malware Store-Time
+### Captured Events
+*color legend see Visibility Overview below, https://github.com/cailllev/EDR-Introspection/edit/master/README.md#visibility-overview*
+
+#### Events at Malware Store-Time
 <img width="1977" height="646" alt="image" src="https://github.com/user-attachments/assets/d3c6b9d4-87a5-49fd-ab5b-467314b57edd" />
 
-### Events at Malware Startup-Time
+#### Events at Malware Startup-Time
 <img width="1980" height="635" alt="image" src="https://github.com/user-attachments/assets/fcc80e91-ea3b-4029-b70b-2c3b673879ac" />
 <img width="1981" height="474" alt="image" src="https://github.com/user-attachments/assets/5cb35d8c-d530-4a95-868b-3bfd1cce1faf" />
 <img width="1980" height="747" alt="image" src="https://github.com/user-attachments/assets/80f8dc92-c814-4da8-889b-5a382ab9179a" />
 
-### Events at Malware Run-Time
+#### Events at Malware Run-Time
 <img width="1981" height="647" alt="image" src="https://github.com/user-attachments/assets/4a755b8a-979c-4a47-947f-686912cdfc7c" />
 
 ## How
