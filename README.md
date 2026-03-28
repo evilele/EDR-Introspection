@@ -4,6 +4,44 @@ The enabling technologies of this projects are:
 - ETW and ETW-TI tracing and filtering for relevant events (related to malware and EDR operations)
 - hooking of the EDR's ntdll to inspect the EDRs actions
 
+## Results
+- enourmous visibility into all relevant EDR actions, able to determine the active detection stage of the EDR at each point in time
+- low level operations like file read with WdFilter.sys remain hidden (but all events before and after can hint to it when it happens)
+- no insights into emulation engine and exact signature matching (but result, i.e. block / non-block can be seen right after this)
+
+### Attacks
+see /attacks/
+- Proc Inject: allocates mem in own process, writes raw bytes of `msfvenom -p windows/x64/exec CMD="calc.exe"` and executes it
+- C2 Loader: allocates mem in own process, writes raw bytes of default CobaltStrike beacon and executes it
+- Lsass Read: calls `MiniDumpWriteDump` from `dbghelp.dll` on lsass.exe, like mimikatz.exe (LSASS' PPL must be stripped before)
+
+### Number of Events Unfiltered
+|    Attack   | Data Source |              |        |             | Total |
+|:-----------:|:-----------:|:------------:|:------:|:-----------:|:-----:|
+|             | Antimalware | Threat Intel | Kernel | EDR Monitor |       |
+| Proc Inject |       12973 |          183 |   4942 |        5712 | 23834 |
+| C2 Loader   |        4695 |          728 |   3375 |       10569 | 19386 |
+| Lsass Read  |        3287 |         2598 |   2204 |        7983 | 16096 |
+
+### Number of Events Filtered
+|    Attack   | Data Source |              |        |             | Total |
+|:-----------:|:-----------:|:------------:|:------:|:-----------:|:-----:|
+|             | Antimalware | Threat Intel | Kernel | EDR Monitor |       |
+| Proc Inject |         855 |           21 |    132 |         165 |  1197 |
+| C2 Loader   |         153 |           24 |    288 |        1283 |  1767 |
+| Lsass Read  |        1526 |            8 |     53 |         169 |  1780 |
+
+### Events at Malware Store-Time
+<img width="1977" height="646" alt="image" src="https://github.com/user-attachments/assets/d3c6b9d4-87a5-49fd-ab5b-467314b57edd" />
+
+### Events at Malware Startup-Time
+<img width="1980" height="635" alt="image" src="https://github.com/user-attachments/assets/fcc80e91-ea3b-4029-b70b-2c3b673879ac" />
+<img width="1981" height="474" alt="image" src="https://github.com/user-attachments/assets/5cb35d8c-d530-4a95-868b-3bfd1cce1faf" />
+<img width="1980" height="747" alt="image" src="https://github.com/user-attachments/assets/80f8dc92-c814-4da8-889b-5a382ab9179a" />
+
+### Events at Malware Run-Time
+<img width="1981" height="647" alt="image" src="https://github.com/user-attachments/assets/4a755b8a-979c-4a47-947f-686912cdfc7c" />
+
 ## How
 - krabsETW to parse all relevant ETW providers
 - EDRi.exe to 
@@ -12,7 +50,17 @@ The enabling technologies of this projects are:
 	- hook ntdll of EDR procs
 - [kdu.exe](https://github.com/hfiref0x/KDU) to run procs as PPL-AntiMalware
 - [EDRSandblast](https://github.com/cailllev/EDRSandblast) to disable kernel callbacks
-- [EPIC](https://github.com/Print3M/epic) to develop the lsass reader as position independent code
+
+### Architecture
+<img width="2619" height="1311" alt="image" src="https://github.com/user-attachments/assets/c236dc0b-a0b7-4683-8954-672bd1bfc81b" />
+
+### Hooking the EDR
+*needs PPL (see KDU.exe) and kernel callbacks of WdFilter.sys removed (see EDRSandblast.exe -toggle_callback)*
+#### Example
+<img width="1791" height="864" alt="image" src="https://github.com/user-attachments/assets/69159723-a315-4c87-aab6-551792171d85" />
+
+### Visibility Overview
+<img width="1484" height="744" alt="image" src="https://github.com/user-attachments/assets/cfb3d3ce-d582-4bf2-bc57-3ff321859055" />
 
 ## How To
 ### Run the Framework
@@ -24,10 +72,14 @@ It is recomended to **make an exclusion** for the EDR-Introspection folder, and 
 .\x64\Release\EDRi.exe -h
 
 # run simplest attack: no ETW-TI, no hooking, minimal traces, run attack as child proc, no debug
-.\x64\Release\EDRi.exe --edr-profile MDE --attack CalcExample_standard -r
+.\x64\Release\EDRi.exe --edr-profile MDE --attack ProcInject_standard -r
 
-# opposite: ETW-TI, hooking ntdll, all traces, debug
-.\helpers\KDU\kdu.exe -pse "$(pwd)\x64\Release\EDRi.exe --edr-profile MDE --attack CalcExample_deconditioning_alloc -t -d" -prv 54
+# all visibility: ETW-TI, hooking ntdll, all traces, debug
+.\helpers\KDU\kdu.exe -pse "$(pwd)\x64\Release\EDRi.exe --edr-profile MDE --attack ProcInject_deconditioning -t -d" -prv 54
+
+# alternative: first just hook, then do attacks (the hooks persist until restart)
+.\helpers\KDU\kdu.exe -pse "$(pwd)\x64\Release\EDRi.exe --just-hook" -prv 54
+.\helpers\KDU\kdu.exe -pse "$(pwd)\x64\Release\EDRi.exe --edr-profile MDE --attack ProcInject_deconditioning -t -d" -prv 54
 ```
 
 ### Create own attack
@@ -45,7 +97,7 @@ It is recomended to **make an exclusion** for the EDR-Introspection folder, and 
 ## Requirements
 * Windows 10 / 11 (others not tested)
 * ability to load vulnerable drivers (when testing with ETW-TI or ntdll hooking)
-* excluding the EDR-Introspection/ folder from your EDR
+* excluding the `EDR-Introspection/` folder from your EDR
 
 ## Misc Tools
 To play around or test stuff, helper exes are provided for the following actions.
