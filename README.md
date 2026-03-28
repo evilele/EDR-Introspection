@@ -32,7 +32,7 @@ see /attacks/
 | Lsass Read  |        1526 |            8 |     53 |         169 |  1780 |
 
 ### Captured Events
-*color legend see Visibility Overview below, https://github.com/cailllev/EDR-Introspection/edit/master/README.md#visibility-overview*
+*color legend see [Visibility Overview](https://github.com/cailllev/EDR-Introspection/blob/master/README.md#visibility-overview) below*
 
 #### Events at Malware Store-Time
 <img width="1977" height="646" alt="image" src="https://github.com/user-attachments/assets/d3c6b9d4-87a5-49fd-ab5b-467314b57edd" />
