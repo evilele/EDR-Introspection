@@ -133,7 +133,7 @@ bool normal_inject(HANDLE hProcess, const std::string& dllPath, bool debug)
     }
     CloseHandle(hThread);
     if (hModule == 0) {
-        std::cerr << "[!] Hooker: LoadLibrary) failed: " << GetLastError() << "\n";
+        std::cerr << "[!] Hooker: LoadLibrary() failed: " << GetLastError() << "\n";
         return false;
     }
 
@@ -268,7 +268,7 @@ bool reflective_inject(int pid, HANDLE hProcess, const std::string& dllPath, boo
     HeapFree(GetProcessHeap(), 0, file_buf);
 
     if (debug)
-        printf("[+] Hooker: DLL successfully exited again\n");
+        printf("[+] Hooker: DllMain successfully exited\n");
     return true;
 }
 

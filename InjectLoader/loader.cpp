@@ -126,12 +126,12 @@ int main(int argc, char* argv[]) {
 	std::string exeName = exePath.substr(exePath.find_last_of("\\/") + 1);
 
     if (argc > 1 && strcmp(argv[1], "-h") == 0) {
-        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top]\n";
+        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top] [(D)ebug]\n";
         return 0;
 	}
 
     if (argc < 4) {
-        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top]\n";
+        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top] [(D)ebug]\n";
         return 1;
     }
 
@@ -163,15 +163,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+	bool debug = false;
+    if (argc >= 5 && (_stricmp(argv[4], "D") == 0 || _stricmp(argv[4], "debug") == 0)) {
+        std::cout << "[*] InjectLoader: Debug mode enabled.\n";
+		debug = true;
+	}
 
     switch(a) {
         case LOADLIBRARY_INJECTION:
             std::cout << "[*] InjectLoader: Attempting to inject DLL '" << dllPath << "' into PID=" << pid << " using LoadLibrary injection method.\n";
-			inject_dll(pid, dllPath, false, false);
+			inject_dll(pid, dllPath, debug, false);
             break;
         case REFLECTIVE_INJECTION:
             std::cout << "[*] InjectLoader: Attempting to inject DLL '" << dllPath << "' into PID=" << pid << " using Reflective injection method.\n";
-            inject_dll(pid, dllPath, false, true);
+            inject_dll(pid, dllPath, debug, true);
             break;
         case STOP_INJECTION:
             std::cout << "[*] InjectLoader: Unloading DLL in " << pid << "\n";
