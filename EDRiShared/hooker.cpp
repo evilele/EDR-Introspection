@@ -133,7 +133,7 @@ bool normal_inject(HANDLE hProcess, const std::string& dllPath, bool debug)
     }
     CloseHandle(hThread);
     if (hModule == 0) {
-        std::cerr << "[!] Hooker: LoadLibrary) failed: " << GetLastError() << "\n";
+        std::cerr << "[!] Hooker: LoadLibrary failed: " << GetLastError() << "\n";
         return false;
     }
 
