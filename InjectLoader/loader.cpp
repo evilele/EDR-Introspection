@@ -31,7 +31,7 @@ HMODULE GetRemoteModuleHandle(DWORD pid, const std::wstring& moduleName) {
 int RemoteFreeLibrary(HANDLE hProcess, HMODULE remoteModule) {
     HMODULE hKernel = GetModuleHandleA("kernel32.dll");
     if (!hKernel)
-		return 1;
+        return 1;
 
     LPVOID freeLibAddr = (LPVOID)GetProcAddress(hKernel, "FreeLibrary");
 
@@ -40,7 +40,7 @@ int RemoteFreeLibrary(HANDLE hProcess, HMODULE remoteModule) {
         nullptr,
         0,
         (LPTHREAD_START_ROUTINE)freeLibAddr,
-		remoteModule, // must be remote addr of module handle
+        remoteModule, // must be remote addr of module handle
         0,
         nullptr
     );
@@ -57,7 +57,7 @@ typedef NTSTATUS(NTAPI* PFN_NtOpenEvent)(
     PHANDLE            EventHandle,
     ACCESS_MASK        DesiredAccess,
     POBJECT_ATTRIBUTES ObjectAttributes
-    ); 
+    );
 
 typedef ULONG(WINAPI* PFN_RtlNtStatusToDosError)(
     NTSTATUS Status
@@ -75,7 +75,7 @@ int unload(int pid, std::string dllName) { // or just use a stopRequest.txt
     if (g_origNtOpenEvent == nullptr || g_origRtlNtStatusToDosError == nullptr) {
         std::wcerr << L"[!] InjectLoader: Failed to get NtOpenEvent or RtlNtStatusToDosError address.\n";
         return 1;
-	}
+    }
 
     // build NT name
     wchar_t eventName[128];
@@ -101,11 +101,11 @@ int unload(int pid, std::string dllName) { // or just use a stopRequest.txt
         CloseHandle(hEvent);
     }
 
-	Sleep(3000); // wait a bit for cleanup
+    Sleep(3000); // wait a bit for cleanup
 
-	HMODULE hMod = GetRemoteModuleHandle(pid, std::wstring(dllName.begin(), dllName.end()));
+    HMODULE hMod = GetRemoteModuleHandle(pid, std::wstring(dllName.begin(), dllName.end()));
     if (hMod != NULL) {
-		HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+        HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
         return RemoteFreeLibrary(hProc, hMod);
     }
 
@@ -115,43 +115,44 @@ int unload(int pid, std::string dllName) { // or just use a stopRequest.txt
 enum Action {
     LOADLIBRARY_INJECTION,
     REFLECTIVE_INJECTION,
-	STOP_INJECTION
+    STOP_INJECTION
 };
 
 int main(int argc, char* argv[]) {
     int pid = 0;
     std::string dllPath;
 
-	std::string exePath = argv[0];
-	std::string exeName = exePath.substr(exePath.find_last_of("\\/") + 1);
+    std::string exePath = argv[0];
+    std::string exeName = exePath.substr(exePath.find_last_of("\\/") + 1);
 
     if (argc > 1 && strcmp(argv[1], "-h") == 0) {
-        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top]\n";
+        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top] [(D)ebug]\n";
         return 0;
-	}
+    }
 
     if (argc < 4) {
-        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top]\n";
+        std::cout << "[*] InjectLoader: Usage: " << exeName << " <DLL Path> <PID> [(L)oadLibrary | (R)eflective | (S)top] [(D)ebug]\n";
         return 1;
     }
 
     dllPath = argv[1];
     try {
         pid = std::stoi(argv[2]);
-    } catch (const std::exception&) {
-        std::cerr << "[!] InjectLoader: Invalid PID: " << argv[1] << "\n";
+    }
+    catch (const std::exception&) {
+        std::cerr << "[!] InjectLoader: Invalid PID: " << argv[2] << "\n";
         return 1;
-	}
+    }
 
     Action a;
     if (_stricmp(argv[3], "S") == 0 || _stricmp(argv[3], "stop") == 0) {
         a = STOP_INJECTION;
-    } 
+    }
     else if (_stricmp(argv[3], "R") == 0 || _stricmp(argv[3], "reflective") == 0) {
         a = REFLECTIVE_INJECTION;
     }
     else {
-		a = LOADLIBRARY_INJECTION;
+        a = LOADLIBRARY_INJECTION;
     }
 
     if (pid <= 0) {
@@ -163,21 +164,27 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    bool debug = false;
+    if (argc >= 5 && (_stricmp(argv[4], "D") == 0 || _stricmp(argv[4], "debug") == 0)) {
+        std::cout << "[*] InjectLoader: Debug mode enabled.\n";
+        debug = true;
+    }
 
-    switch(a) {
-        case LOADLIBRARY_INJECTION:
-            std::cout << "[*] InjectLoader: Attempting to inject DLL '" << dllPath << "' into PID=" << pid << " using LoadLibrary injection method.\n";
-			inject_dll(pid, dllPath, false, false);
-            break;
-        case REFLECTIVE_INJECTION:
-            std::cout << "[*] InjectLoader: Attempting to inject DLL '" << dllPath << "' into PID=" << pid << " using Reflective injection method.\n";
-            inject_dll(pid, dllPath, false, true);
-            break;
-        case STOP_INJECTION:
-            std::cout << "[*] InjectLoader: Unloading DLL in " << pid << "\n";
-			std::string dllName = dllPath.substr(dllPath.find_last_of("\\/") + 1);
-            return unload(pid, dllName);
-	}
+
+    switch (a) {
+    case LOADLIBRARY_INJECTION:
+        std::cout << "[*] InjectLoader: Attempting to inject DLL '" << dllPath << "' into PID=" << pid << " using LoadLibrary injection method.\n";
+        inject_dll(pid, dllPath, debug, false);
+        break;
+    case REFLECTIVE_INJECTION:
+        std::cout << "[*] InjectLoader: Attempting to inject DLL '" << dllPath << "' into PID=" << pid << " using Reflective injection method.\n";
+        inject_dll(pid, dllPath, debug, true);
+        break;
+    case STOP_INJECTION:
+        std::cout << "[*] InjectLoader: Unloading DLL in " << pid << "\n";
+        std::string dllName = dllPath.substr(dllPath.find_last_of("\\/") + 1);
+        return unload(pid, dllName);
+    }
 
     return 0;
 }
