@@ -138,7 +138,7 @@ int wmain(int argc, wchar_t* argv[]) {
                 if (targetpid != static_cast<uint64_t>(-1)) {
                     std::wcout << L"TargetPID=" << std::left << std::setw(5) << std::setfill(L' ') << targetpid << L" - ";
                 }
-                std::wcout << wmsg << L"\n";
+                std::wcout << wmsg.substr(0, 94) << L"\n";
             }
             else {
                 std::wcout << L"PID: " << record.EventHeader.ProcessId
