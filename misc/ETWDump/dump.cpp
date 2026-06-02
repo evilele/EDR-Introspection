@@ -12,6 +12,9 @@ static const std::wstring attacks_provider = L"{72248466-7166-4feb-a386-34d8f35b
 static const std::wstring hooks_provider = L"{72248411-7166-4feb-a386-34d8f35bb637}"; // Hooks
 
 
+bool minimal = false;
+
+
 bool is_admin() {
     BOOL is_admin = FALSE;
     PSID admin_group = nullptr;
@@ -68,26 +71,29 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
     std::wstring provider_guid_str;
-    if (argc == 2) {
-        wchar_t *p = argv[1];
-        if (lstrcmpW(p, L"EDRi") == 0) {
-            provider_guid_str = edri_provider;
-        }
-        else if (lstrcmpW(p, L"Attack") == 0) {
-            provider_guid_str = attacks_provider;
-        }
-        else if (lstrcmpW(p, L"Hooks") == 0) {
-            provider_guid_str = hooks_provider;
-        }
-        else {
-            std::wcerr << L"[!] Usage: " << argv[0] << L" [EDRi | Attack | Hooks]\n";
-            return 1;
-        }
+    if (argc < 2 || argc > 3) {
+        std::wcerr << L"[!] Usage: " << argv[0] << L" [EDRi | Attack | Hooks] (minimal)\n";
+        return 1;
+    }
+    if (argc == 3) {
+        minimal = true;
+    }
+    // argc == 2
+    wchar_t *p = argv[1];
+    if (lstrcmpW(p, L"EDRi") == 0) {
+        provider_guid_str = edri_provider;
+    }
+    else if (lstrcmpW(p, L"Attack") == 0) {
+        provider_guid_str = attacks_provider;
+    }
+    else if (lstrcmpW(p, L"Hooks") == 0) {
+        provider_guid_str = hooks_provider;
     }
     else {
         std::wcerr << L"[!] Usage: " << argv[0] << L" [EDRi | Attack | Hooks]\n";
         return 1;
     }
+
     try {
         // Create provider
         krabs::guid provider_guid(provider_guid_str);
@@ -127,21 +133,30 @@ int wmain(int argc, wchar_t* argv[]) {
             std::wstring wmsg = char2wstring(msg);
             std::wstring wtime = char2wstring(iso_time.c_str());
 
-            std::wcout << L"PID: " << record.EventHeader.ProcessId
-                << L" : " << wtask << L"\n";
-            std::wcout << L"  message: " << wmsg << L"\n";
-            std::wcout << L"  timestamp: " << wtime << L"\n";
-            if (targetpid != static_cast<uint64_t>(-1)) {
-                std::wcout << L"  targetpid: " << targetpid << L"\n";
+            if (minimal) {
+                std::wcout << wtime << L": ";
+                if (targetpid != static_cast<uint64_t>(-1)) {
+                    std::wcout << L"TargetPID=" << std::left << std::setw(5) << std::setfill(L' ') << targetpid << L" - ";
+                }
+                std::wcout << wmsg << L"\n";
             }
-            std::wcout << L"--------------------------\n";
+            else {
+                std::wcout << L"PID: " << record.EventHeader.ProcessId
+                    << L" : " << wtask << L"\n";
+                std::wcout << L"  message: " << wmsg << L"\n";
+                std::wcout << L"  timestamp: " << wtime << L"\n";
+                if (targetpid != static_cast<uint64_t>(-1)) {
+                    std::wcout << L"  targetpid: " << targetpid << L"\n";
+                }
+                std::wcout << L"--------------------------\n";
+            }
         });
 
         // Trace session
         krabs::user_trace trace(L"SimpleKrabsTrace");
         trace.enable(provider);
 
-        std::wcout << L"[*] Listening to " << provider_guid_str << L"... Press Ctrl+C to exit" << L"\n";
+        std::wcout << L"[*] Listening to " << provider_guid_str << L"..." << L"\n";
         trace.start(); // blocks
     }
     catch (const std::exception& e) {

@@ -383,3 +383,6 @@ FodyWeavers.xsd
 !/x64/Release/InjectLoader.exe
 !/x64/Release/ProcTerminator.exe
 !/x64/Release/ReadPEB.exe
+
+# pdb offsets
+helpers/EDRSandblast/offsets/

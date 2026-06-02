@@ -93,10 +93,10 @@ int unload(int pid, std::string dllName) { // or just use a stopRequest.txt
 
     if (!NT_SUCCESS(st)) {
         DWORD winerr = g_origRtlNtStatusToDosError(st);
-        std::wcerr << "[!] InjectorLoader: Failt to NtOpenEvent " << eventName << ", WinErr = " << winerr << L"\n";
+        std::wcerr << "[!] InjectLoader: Failt to NtOpenEvent " << eventName << ", WinErr = " << winerr << L"\n";
     }
     else {
-        std::wcout << "[-] InjectorLoader: NtOpenEvent " << eventName << " ok, sending stop signal\n";
+        std::wcout << "[-] InjectLoader: NtOpenEvent " << eventName << " ok, sending stop signal\n";
         SetEvent(hEvent);
         CloseHandle(hEvent);
     }
