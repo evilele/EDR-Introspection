@@ -1,6 +1,11 @@
-# py -m pip install requests pefile
-
 $r = $PsScriptRoot
+if ((Get-Location).Path -ne $r) {
+	Write-Host "This script must be executed from within $r"
+	Exit
+}
+
+py -m pip install requests pefile
+
 $edrs = "$r\..\helpers\EDRSandblast"
 $eoffs = "$edrs\ExtractOffsets.py"
 $offsets = "$edrs\offsets\"
