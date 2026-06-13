@@ -19,6 +19,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "InjectLoader", "InjectLoade
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ETWDump", "misc\ETWDump\ETWDump.vcxproj", "{558A0A1C-D385-48EF-B2BD-D6381F8E551A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DefenderBase", "misc\DefenderBase\DefenderBase.vcxproj", "{40491328-E731-44E3-A669-FC7D51C8FB99}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -83,6 +85,14 @@ Global
 		{558A0A1C-D385-48EF-B2BD-D6381F8E551A}.Release|x64.Build.0 = Release|x64
 		{558A0A1C-D385-48EF-B2BD-D6381F8E551A}.Release|x86.ActiveCfg = Release|Win32
 		{558A0A1C-D385-48EF-B2BD-D6381F8E551A}.Release|x86.Build.0 = Release|Win32
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Debug|x64.ActiveCfg = Debug|x64
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Debug|x64.Build.0 = Debug|x64
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Debug|x86.ActiveCfg = Debug|Win32
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Debug|x86.Build.0 = Debug|Win32
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Release|x64.ActiveCfg = Release|x64
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Release|x64.Build.0 = Release|x64
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Release|x86.ActiveCfg = Release|Win32
+		{40491328-E731-44E3-A669-FC7D51C8FB99}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
