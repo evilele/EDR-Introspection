@@ -5,6 +5,8 @@
 #include <winternl.h>
 #include <tlhelp32.h>
 #include <iostream>
+#include <sstream>
+#include <fstream>
 
 #pragma comment(lib, "ntdll.lib")
 
@@ -79,11 +81,11 @@ int get_defender_proc() {
 }
 
 // open MsMpEng.exe with limited permissions and return base address
-void print_defender_base(int pid) {
+std::wstring print_defender_base(int pid) {
 	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
 	if (hProcess == NULL) {
 		std::wcout << L"[-] Failed to open process. Error: " << GetLastError() << L"\n";
-		return;
+		return L"";
 	}
 
 	HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
@@ -91,7 +93,7 @@ void print_defender_base(int pid) {
 	if (NtQueryInformationProcess == 0) {
 		std::wcout << L"[-] Failed to get NtQueryInformationProcess address.\n";
 		CloseHandle(hProcess);
-		return;
+		return L"";
 	}
 
 	PROCESS_BASIC_INFORMATION pbi;
@@ -101,14 +103,14 @@ void print_defender_base(int pid) {
 	if (!ReadProcessMemory(hProcess, pbi.PebBaseAddress, &peb, sizeof(peb), nullptr)) {
 		std::wcout << L"[-] Failed to read PEB. Error: " << GetLastError() << L"\n";
 		CloseHandle(hProcess);
-		return;
+		return L"";
 	}
 
 	my_PEB_LDR_DATA ldr{};
 	if (!ReadProcessMemory(hProcess, peb.Ldr, &ldr, sizeof(ldr), nullptr)) {
 		std::wcout << L"[-] Failed to read PEB_LDR_DATA. Error: " << GetLastError() << L"\n";
 		CloseHandle(hProcess);
-		return;
+		return L"";
 	}
 
 	PVOID headAddr = (PBYTE)peb.Ldr + offsetof(my_PEB_LDR_DATA, InMemoryOrderModuleList);
@@ -117,18 +119,23 @@ void print_defender_base(int pid) {
 	ReadProcessMemory(hProcess, headAddr, &head, sizeof(head), nullptr);
 	PVOID current = head.Flink;
 
+	std::wstring bases = L"BaseAddr,ModuleName\n";
+
 	while (current && current != headAddr) {
 		my_LDR_DATA_TABLE_ENTRY entry{};
 		if (!ReadProcessMemory(hProcess, CONTAINING_RECORD(current, my_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks), &entry, sizeof(entry), nullptr)) {
 			std::wcout << L"[-] Failed to read LDR_DATA_TABLE_ENTRY. Error: " << GetLastError() << L"\n";
 			CloseHandle(hProcess);
-			return;
+			return bases;
 		}
 		if (entry.FullDllName.Buffer) {
 			wchar_t dll_name[MAX_PATH];
 			if (ReadProcessMemory(hProcess, entry.FullDllName.Buffer, dll_name, entry.FullDllName.Length, nullptr)) {
 				dll_name[entry.FullDllName.Length / sizeof(wchar_t)] = L'\0'; // null-terminate
 				std::wcout << L"[+] Found module: 0x" << entry.DllBase << L":" << dll_name << L"\n";
+				std::wstringstream wss;
+				wss << L"0x" << std::hex << (uintptr_t)entry.DllBase;
+				bases += wss.str() + L",\"" + dll_name + L"\"\n";
 			}
 			else {
 				std::wcout << L"[-] Failed to read module name. Error: " << GetLastError() << L"\n";
@@ -138,14 +145,37 @@ void print_defender_base(int pid) {
 	}
 
 	CloseHandle(hProcess);
+	return bases;
 }
 
-int main() {
+int wmain(int argc, wchar_t* argv[]) {
 	int pid = get_defender_proc();
 	if (pid == 0) {
 		std::wcout << L"[-] MsMpEng.exe not found.\n";
 		return 1;
 	}
-	print_defender_base(pid);
+
+	std::wstring bases = print_defender_base(pid);
+	std::wstring output_file = L"defender_bases.csv";
+
+	if (argc > 1) {
+		output_file = argv[1];
+		std::wcout << L"[+] Output file specified: " << output_file << L"\n";
+	}
+	else {
+		std::wcout << L"[+] No output file specified, using default: defender_bases.csv\n";
+	}
+
+	// write bases to file
+	std::wofstream outfile(output_file);
+	if (outfile.is_open()) {
+		outfile << bases;
+		outfile.close();
+	}
+	else {
+		std::wcout << L"[-] Failed to write to file.\n";
+		return 1;
+	}
+
 	std::wcout << L"[+] Done.\n";
 }
