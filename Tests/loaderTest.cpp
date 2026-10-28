@@ -167,8 +167,24 @@ void ResetEtwEvent() {
     }
 }
 
-void TestDllInjection(Injection injectionType, Executor execType, DllLoadedVerification verificationType, BOOL testUnloading, BOOL debug) {
+void TestDllInjection(Injection injectionType, Executor execType) {
     SUCCEED("Starting TestEXE..."); // force print of test headers
+
+    DllLoadedVerification verificationType;
+    BOOL testUnloading;
+    switch (injectionType) {
+    case Injection::LOADLIBRARY_INJECTION:
+        verificationType = TOOLHELP_MODULE_SNAPSHOT;
+        testUnloading = true;
+        break;
+    case Injection::HOSTMAPPED_INJECTION:
+    case Injection::REFLECTIVE_INJECTION:
+        verificationType = MEMORY_PARSING;
+        testUnloading = false;
+        break;
+    default:
+        FAIL("Unknown injection type.\n");
+    }
 
 	// start test process and reset event
 	TestProcess p;
@@ -216,40 +232,40 @@ void TestDllInjection(Injection injectionType, Executor execType, DllLoadedVerif
 }
 
 TEST_CASE("DLL Injection: LoadLibrary + CreateRemoteThread", "[hooker][loadlibrary][createremotethread]") {
-    TestDllInjection(LOADLIBRARY_INJECTION, CREATE_REMOTE_THREAD, TOOLHELP_MODULE_SNAPSHOT, true, TRUE);
+    TestDllInjection(LOADLIBRARY_INJECTION, CREATE_REMOTE_THREAD);
 }
 TEST_CASE("DLL Injection: LoadLibrary + HijackThread", "[hooker][loadlibrary][hijackthread]") {
-    TestDllInjection(LOADLIBRARY_INJECTION, HIJACK_THREAD, TOOLHELP_MODULE_SNAPSHOT, true, TRUE);
+    TestDllInjection(LOADLIBRARY_INJECTION, HIJACK_THREAD);
 }
 TEST_CASE("DLL Injection: LoadLibrary + QueueUserAPC2", "[hooker][loadlibrary][queueuserapc2]") {
-    TestDllInjection(LOADLIBRARY_INJECTION, QUEUE_USER_APC2, TOOLHELP_MODULE_SNAPSHOT, true, TRUE);
+    TestDllInjection(LOADLIBRARY_INJECTION, QUEUE_USER_APC2);
 }
 TEST_CASE("DLL Injection: LoadLibrary + Threadless", "[hooker][loadlibrary][threadless]") {
-    TestDllInjection(LOADLIBRARY_INJECTION, THREADLESS_INJECTION, TOOLHELP_MODULE_SNAPSHOT, true, TRUE);
+    TestDllInjection(LOADLIBRARY_INJECTION, THREADLESS_INJECTION);
 }
 
 TEST_CASE("DLL Injection: HostMappedAndShellcode + CreateRemoteThread", "[hooker][hostmapped][createremotethread]") {
-    TestDllInjection(HOSTMAPPED_INJECTION, CREATE_REMOTE_THREAD, MEMORY_PARSING, false, TRUE);
+    TestDllInjection(HOSTMAPPED_INJECTION, CREATE_REMOTE_THREAD);
 }
 TEST_CASE("DLL Injection: HostMappedAndShellcode + HijackThread", "[hooker][hostmapped][hijackthread]") {
-    TestDllInjection(HOSTMAPPED_INJECTION, HIJACK_THREAD, MEMORY_PARSING, false, TRUE);
+    TestDllInjection(HOSTMAPPED_INJECTION, HIJACK_THREAD);
 }
 TEST_CASE("DLL Injection: HostMappedAndShellcode + QueueUserAPC2", "[hooker][hostmapped][queueuserapc2]") {
-    TestDllInjection(HOSTMAPPED_INJECTION, QUEUE_USER_APC2, MEMORY_PARSING, false, TRUE);
+    TestDllInjection(HOSTMAPPED_INJECTION, QUEUE_USER_APC2);
 }
 TEST_CASE("DLL Injection: HostMappedAndShellcode + Threadless", "[hooker][hostmapped][threadless]") {
-    TestDllInjection(HOSTMAPPED_INJECTION, THREADLESS_INJECTION, TOOLHELP_MODULE_SNAPSHOT, true, TRUE);
+    TestDllInjection(HOSTMAPPED_INJECTION, THREADLESS_INJECTION);
 }
 
 TEST_CASE("DLL Injection: Reflective + CreateRemoteThread", "[hooker][reflective][createremotethread]") {
-    TestDllInjection(REFLECTIVE_INJECTION, CREATE_REMOTE_THREAD, MEMORY_PARSING, false, TRUE);
+    TestDllInjection(REFLECTIVE_INJECTION, CREATE_REMOTE_THREAD);
 }
 TEST_CASE("DLL Injection: Reflective + HijackThread", "[hooker][inject][reflective][hijackthread]") {
-    TestDllInjection(REFLECTIVE_INJECTION, HIJACK_THREAD, MEMORY_PARSING, false, TRUE);
+    TestDllInjection(REFLECTIVE_INJECTION, HIJACK_THREAD);
 }
 TEST_CASE("DLL Injection: Reflective + QueueUserAPC2", "[hooker][reflective][queueuserapc2]") {
-    TestDllInjection(REFLECTIVE_INJECTION, QUEUE_USER_APC2, MEMORY_PARSING, false, TRUE);
+    TestDllInjection(REFLECTIVE_INJECTION, QUEUE_USER_APC2);
 }
 TEST_CASE("DLL Injection: Reflective + Threadless", "[hooker][reflective][threadless]") {
-    TestDllInjection(REFLECTIVE_INJECTION, THREADLESS_INJECTION, TOOLHELP_MODULE_SNAPSHOT, true, TRUE);
+    TestDllInjection(REFLECTIVE_INJECTION, THREADLESS_INJECTION);
 }
