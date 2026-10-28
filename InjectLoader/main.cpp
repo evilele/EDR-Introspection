@@ -145,5 +145,7 @@ int main(int argc, char* argv[]) {
         "         into PID " << pid << "\n"
         "            using " << actionStr << "\n"
         "              and " << execStr << "\n";
-    return InjectDll(pid, dllPath, hProc, injectType, execType, yoloMode, debug);
+    bool ret = InjectDll(pid, dllPath, hProc, injectType, execType, yoloMode, debug);
+    if (hProc) CloseHandle(hProc);
+    return !ret;
 }
