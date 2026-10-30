@@ -251,23 +251,23 @@ static void* ResolveFunction(void* ptr) {
 #define QUEUE_USER_APC_SPECIAL_USER_APC 0x00000001
 #endif
 
-enum class BOOTSTRAP_STATE : ULONG_PTR {
+enum BOOTSTRAP_STATE : ULONG_PTR {
     BS_PENDING = 0,
     BS_EXECUTING = 1,
     BS_FINISHED = 2
 };
 
-using f_Routine = DWORD(__fastcall*)(void* pArg);
+using f_Routine = DWORD64(__fastcall*)(LPVOID pArg);
 
 #define ALIGN __declspec(align(8))
 
 ALIGN struct BootstrapData {
     ALIGN BOOTSTRAP_STATE    State = BOOTSTRAP_STATE::BS_PENDING;
-    ALIGN DWORD              Ret = 0;
-    ALIGN DWORD              LastWin32Error = 0;
-    ALIGN void*              pArg = nullptr;
-    ALIGN f_Routine          pRoutine = nullptr;
-    ALIGN UINT_PTR           Buffer = 0;
+    ALIGN DWORD64            Ret = 0;
+    ALIGN DWORD64            LastWin32Error = 0;
+    ALIGN LPVOID             pArg = 0;
+    ALIGN f_Routine          pRoutine = 0;
+    ALIGN LPVOID             Buffer = 0;
 };
 
 // Space reserved for SR_REMOTE_DATA (sizeof X void pointers, see above)
@@ -715,7 +715,7 @@ OPTIMAL_THREAD GetThreadForExecutor(DWORD targetProcessId, Executor exec, bool y
 * 6. read back the memory to check if the execution was successful
 */
 // https://github.com/guidedhacking/GuidedHacking-Injector/blob/e3c6eab04943b10881a7039dc27ff964c79fcb64/GH%20Injector%20Library/Thread%20Hijacking.cpp#L10
-LOADER_RET HijackThread(HANDLE hProcess, HANDLE hThread, LPVOID pRemoteRoutine, LPVOID pRemoteArgs, bool debug) {
+LOADER_RET HijackThread(HANDLE hProcess, HANDLE hThread, LPVOID pRemoteRoutine, LPVOID pRemoteArgs, bool zeroRetSuccess, bool debug) {
 
     // Suspend the target thread to safely modify its state
     if (SuspendThread(hThread) == (DWORD)-1) {
@@ -746,73 +746,54 @@ LOADER_RET HijackThread(HANDLE hProcess, HANDLE hThread, LPVOID pRemoteRoutine, 
         // push rax and patch old rip into rax,  and at the end pop and jump to it.
         // =========================================================================
         0x50,                                                                   // [0x00] push rax (save RAX before saving OldRIP to stack)
-        0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,             // [0x01] mov rax, OldRIP (Patched dynamically)
+        0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,             // [0x01] mov rax, OldRIP (patched dynamically)
 
         // =========================================================================
         // PHASE 2: Register & CPU State Preservation
-        // Saves volatile registers, flags, and non-volatile RBX to preserve the thread's
-        // exact state prior to hijacking.
+        // Saves volatile regs, flags, and RBX to preserve the state prior.
         // =========================================================================
         0x50, 0x51, 0x52, 0x41, 0x50, 0x41, 0x51, 0x41, 0x52, 0x41, 0x53,       // [0x0B] push volatile regs (RAX with OldRIP, RCX, RDX, R8-R11)
-        0x9C,                                                                   // [0x16] pushfq (Push CPU flags)
-        0x53,                                                                   // [0x17] push rbx
+        0x9C,                                                                   // [0x16] pushfq (push CPU flags)
+        0x53,                                                                   // [0x17] push rbx (later used as pointer to BootstrapData)
 
         // =========================================================================
         // PHASE 3: Data Structure Resolution & Execution Status Update
         // Calculates RIP-relative pointer to BootstrapData and updates state to "EXECUTING".
         // =========================================================================
-        0x48, 0x8D, 0x1D, 0x00, 0x00, 0x00, 0x00,                               // [0x18] lea rbx, [BootstrapData] (Patched dynamically)
+        0x48, 0x8D, 0x1D, 0x00, 0x00, 0x00, 0x00,                               // [0x18] lea rbx, [BootstrapData] (points to BootstrapShellcode[0])
         0xC6, 0x03, 0x01,                                                       // [0x1F] mov byte ptr [rbx], 1 (BOOTSTRAP_STATE = EXECUTING)
 
         // =========================================================================
         // PHASE 4: Win64 ABI Stack Alignment & Argument Setup
-        // Establishes a frame pointer, enforces 16-byte stack alignment required by 
-        // x64 calling convention, loads RCX (1st argument), and allocates 32-byte shadow space.
+        // Loads RCX (1st arg) and RAX, allocates 32-byte shadow space, calls pRoutine
         // =========================================================================
-        0x55,                                                                   // [0x22] push rbp
-        0x48, 0x8B, 0xEC,                                                       // [0x23] mov rbp, rsp
-        0x48, 0x83, 0xE4, 0xF0,                                                 // [0x26] and rsp, -0x10 (16-byte align RSP)
-        0x48, 0x8B, 0x4B, 0x18,                                                 // [0x2A] mov rcx, [rbx + 0x18] (Load BootstrapData::pArg into RCX)
-        0x48, 0x83, 0xEC, 0x28,                                                 // [0x2E] sub rsp, 0x28 (Reserve shadow space)
-
-        // =========================================================================
-        // PHASE 5: Call pRoutine
-        // movs BootstrapData::pRoutine function and calls it (WHAT THIS EVEN DO?)
-        // =========================================================================
-        0x48, 0x8D, 0x05, 0x0D, 0x00, 0x00, 0x00,                               // [0x32] lea rax, [rip + 0x0D] (Point to 'add rsp, 0x20')
-        0x50,                                                                   // [0x39] push rax (Push real return address)
-        0x48, 0x8B, 0x43, 0x20,                                                 // [0x3A] mov rax, [rbx + 0x20] (get BootstrapData::pRoutine)
-        0xFF, 0xD0,                                                             // [0x3E] call rax (call BootstrapData::pRoutine and return to 0x40)
+        0x48, 0x8B, 0x4B, 0x18,                                                 // [0x22] mov rcx, [rbx + 0x18] (Load BootstrapData::pArg into RCX)
+        0x48, 0x83, 0xEC, 0x28,                                                 // [0x26] sub rsp, 0x28 (Reserve shadow space)
+        0x48, 0x8B, 0x43, 0x20,                                                 // [0x2A] mov rax, [rbx + 0x20] (get BootstrapData::pRoutine)
+        0xFF, 0xD0,                                                             // [0x2E] call rax (call BootstrapData::pRoutine and return to next line)
 
 
         // =========================================================================
-        // PHASE 6: Post-Execution Cleanup & Return Value Capture
+        // PHASE 5: Post-Execution Cleanup & Return Value Capture
         // Cleans up shadow space and saves BootstrapData::pRoutine's return value (RAX).
-        // =========================================================================
-        0x48, 0x83, 0xC4, 0x20,                                                 // [0x40] add rsp, 0x20 (Clean shadow space)
-        0x48, 0x89, 0x43, 0x08,                                                 // [0x44] mov [rbx + 0x08], rax (Store ReturnValue in BootstrapData::Ret)
-        0x48, 0x8B, 0xE5,                                                       // [0x48] mov rsp, rbp (Restore RSP)
-        0x5D,                                                                   // [0x4B] pop rbp
-
-        // =========================================================================
-        // PHASE 7: Thread Environment Capture & Completion Signaling
         // Fetches GetLastError via TEB (GS:[0x30] -> offset 0x68) and marks state as "Finished".
         // =========================================================================
-        0x65, 0x48, 0x8B, 0x04, 0x25, 0x30, 0x00, 0x00, 0x00,                   // [0x4C] mov rax, gs:[0x30] (TEB pointer)
-        0x8B, 0x40, 0x68,                                                       // [0x55] mov eax, [rax + 0x68] (TEB.LastErrorValue)
-        0x89, 0x43, 0x10,                                                       // [0x58] mov [rbx + 0x10], eax (Store LastWin32Error)
-        0xC6, 0x03, 0x02,                                                       // [0x5A] mov byte ptr [rbx], 2 (BOOTSTRAP_STATE = Finished)
+        0x48, 0x83, 0xC4, 0x28,                                                 // [0x30] add rsp, 0x28 (Clean shadow space)
+        0x48, 0x89, 0x43, 0x08,                                                 // [0x34] mov [rbx + 0x08], rax (Store ReturnValue in BootstrapData::Ret)
+        0x65, 0x48, 0x8B, 0x04, 0x25, 0x30, 0x00, 0x00, 0x00,                   // [0x38] mov rax, gs:[0x30] (TEB pointer)
+        0x8B, 0x40, 0x68,                                                       // [0x41] mov eax, [rax + 0x68] (TEB.LastErrorValue)
+        0x89, 0x43, 0x10,                                                       // [0x44] mov [rbx + 0x10], eax (Store LastWin32Error)
+        0xC6, 0x03, 0x02,                                                       // [0x47] mov byte ptr [rbx], 2 (BOOTSTRAP_STATE = Finished)
 
         // =========================================================================
-        // PHASE 8: Register Restoration & Thread Execution Resume
-        // Restores original thread registers in reverse order. The final RET pops
-        // OldRIP (pushed in Phase 1) back into RIP to seamlessly resume original execution.
+        // PHASE 6: Register Restoration & Thread Execution Resume
+        // Restores original thread registers and rsp, jumps to old RIP
         // =========================================================================
-        0x5B,                                                                   // [0x5E] pop rbx
-        0x9D,                                                                   // [0x5F] popfq (Restore flags)
-        0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5A, 0x59, 0x58,       // [0x60] pop volatile regs (R11-R8, RDX, RCX, RAX)
-        0x48, 0x83, 0xC4, 0x08,                                                 // [0x6B] add rsp, 0x08 (restore old RSP, ret would do the same to RSP)
-        0xFF, 0x64, 0x24, 0x08                                                  // [0x70] jmp [rsp+8] (same as ret would, or is it -8)
+        0x5B,                                                                   // [0x4A] pop rbx
+        0x9D,                                                                   // [0x4B] popfq (Restore flags)
+        0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5A, 0x59, 0x58,       // [0x4C] pop volatile regs (R11-R8, RDX, RCX, RAX)
+        0x48, 0x83, 0xC4, 0x08,                                                 // [0x57] add rsp, 0x08 (restore old RSP, ret would do the same to RSP)
+        0xFF, 0x64, 0x24, 0xF0                                                  // [0x5B] jmp [rsp-0x10] (jump to the ret addr on the stack)
     };
 
     size_t ripOffsetInBootstrap = sizeof(BootstrapData) + 0x03; // mov(2) XX XX XX XX XX XX XX XX
@@ -916,12 +897,13 @@ LOADER_RET HijackThread(HANDLE hProcess, HANDLE hThread, LPVOID pRemoteRoutine, 
         }
 
         if (bootstrapVerify.State == BOOTSTRAP_STATE::BS_FINISHED) {
-            if (bootstrapVerify.Ret == 0) {
-                printf("[*] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed and returned to old state\n");
+            if ((bootstrapVerify.Ret == 0) == zeroRetSuccess) {
+                if (debug) printf("[+] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed and returned expected value: 0x%llx\n", bootstrapVerify.Ret);
             }
             else {
-                printf("[!] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed but returned %lu with LastError %lu\n", bootstrapVerify.Ret, bootstrapVerify.LastWin32Error);
+                printf("[!] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed but returned unexpected valued: 0x%llx\n", bootstrapVerify.Ret);
             }
+
             // when finished, do cleanup
             if (pRemoteRoutine) VirtualFreeEx(hProcess, pRemoteRoutine, 0, MEM_RELEASE);
             if (pRemoteBootstrapShellcode) VirtualFreeEx(hProcess, pRemoteBootstrapShellcode, 0, MEM_RELEASE);
@@ -1232,7 +1214,7 @@ LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, b
 }
 
 // execute lpStartAddress(lpParameter) with the given executor type in remote hProcess
-LOADER_RET ExecuteDllLoader(HANDLE hProcess, Executor exec, LPVOID lpStartAddress, LPVOID lpParameter, bool yoloMode, bool debug) {
+LOADER_RET ExecuteDllLoader(HANDLE hProcess, Executor exec, LPVOID lpStartAddress, LPVOID lpParameter, bool yoloMode, bool zeroRetSuccess, bool debug) {
 
     if (debug) {
         printf("[*] Injector-Executor: Will do %s on 0x%p", GetExecutorTypeStr(exec).c_str(), lpStartAddress);
@@ -1256,6 +1238,19 @@ LOADER_RET ExecuteDllLoader(HANDLE hProcess, Executor exec, LPVOID lpStartAddres
             return timeout;
         }
 
+        DWORD exitCode = 0;
+        if (GetExitCodeThread(hThread, &exitCode)) {
+            if ((exitCode == 0) == zeroRetSuccess) {
+                if (debug) printf("[+] Injector-Exeuctor: Remote thread returned expected value: 0x%lx\n", exitCode);
+            }
+            else {
+                printf("[!] Injector-Executor: Remote thread returned unexpected valued: 0x%lx\n", exitCode);
+            }
+        }
+        else {
+            printf("[!] Injector-Executor: Cannot get exit code for remote thread\n");
+        }
+
         CloseHandle(hThread);
         return successful;
     }
@@ -1276,7 +1271,7 @@ LOADER_RET ExecuteDllLoader(HANDLE hProcess, Executor exec, LPVOID lpStartAddres
     LOADER_RET ret = failed;
     
     if (execUpdated == HIJACK_THREAD) {
-        ret = HijackThread(hProcess, hThread, lpStartAddress, lpParameter, debug);
+        ret = HijackThread(hProcess, hThread, lpStartAddress, lpParameter, zeroRetSuccess, debug);
     }
     
     else if (execUpdated == QUEUE_USER_APC2) {
@@ -1326,7 +1321,8 @@ bool LoadLibraryInject(HANDLE hProcess, const std::string& dllPath, Executor exe
         printf("[+] Injector-LoadLibrary: Wrote string '%s' to target\n", dllPath.c_str());
 
     // finally execute the dll loader with the given executor
-    LOADER_RET ret = ExecuteDllLoader(hProcess, exec, (LPVOID)LoadLibraryA, pDllPath, yoloMode, debug);
+    bool zeroRetSuccess = false; // loadlibrary returns addr (nonzero) when successful
+    LOADER_RET ret = ExecuteDllLoader(hProcess, exec, (LPVOID)LoadLibraryA, pDllPath, yoloMode, zeroRetSuccess, debug);
     if (ret == LOADER_RET::failed) {
         printf("[!] Injector-LoadLibrary: %s failed to load '%s' into remote process %i\n", GetExecutorTypeStr(exec).c_str(), dllPath.c_str(), GetProcessId(hProcess));
         return HandleCleanup(hProcess, { pDllPath }, NULL);
@@ -1527,7 +1523,8 @@ bool HostMappedAndShellcodeLoaderInject(HANDLE hProcess, const std::string& dllP
         printf("[+] Injector-HostShell: Wrote all %zu bytes of dll loading shellcode to remote process at 0x%p\n", dllLoadingShellcodeSize, pRemoteDllLoadingShellcode);
 
     // finally execute the dll loader with the given executor
-    LOADER_RET ret = ExecuteDllLoader(hProcess, exec, pRemoteDllLoadingShellcode, pRemoteDllLoadingData, yoloMode, debug);
+    bool zeroRetSuccess = false; // a successful load should return 1 (TRUE)
+    LOADER_RET ret = ExecuteDllLoader(hProcess, exec, pRemoteDllLoadingShellcode, pRemoteDllLoadingData, yoloMode, zeroRetSuccess, debug);
     if (ret == LOADER_RET::failed) {
         printf("[!] Injector-HostShell: Executor %s failed to execute in remote process %i\n", GetExecutorTypeStr(exec).c_str(), GetProcessId(hProcess));
         return HandleCleanup(hProcess, { pRemoteTargetBase, pRemoteDllLoadingData, pRemoteDllLoadingShellcode }, NULL);
@@ -1769,7 +1766,8 @@ bool ReflectiveSelfLoaderInject(HANDLE hProcess, const std::string& dllPath, Exe
     LPTHREAD_START_ROUTINE lpRemoteLoaderEntry = (LPTHREAD_START_ROUTINE)((ULONG_PTR)pRemoteTargetBase + (ULONG_PTR)loaderOffset);
 
     // finally execute the dll loader with the given executor
-    LOADER_RET ret = ExecuteDllLoader(hProcess, exec, lpRemoteLoaderEntry, NULL, yoloMode, debug);
+    bool zeroRetSuccess = false; // a successful load should return 1 (TRUE) (also dependent on reflective loader)
+    LOADER_RET ret = ExecuteDllLoader(hProcess, exec, lpRemoteLoaderEntry, NULL, yoloMode, zeroRetSuccess, debug);
     if (ret == LOADER_RET::failed) {
         printf("[!] Injector-Reflective: %s failed to load '%s' into remote process %i\n", GetExecutorTypeStr(exec).c_str(), dllPath.c_str(), GetProcessId(hProcess));
         return HandleCleanup(hProcess, { pRemoteTargetBase }, fileBuffer);
