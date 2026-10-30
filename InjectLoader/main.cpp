@@ -31,7 +31,6 @@ int main(int argc, char* argv[]) {
     usage += "      - HostMapped requires the DLL to be compiled with GS- (Buffer Security Check disabled) and with RTC1 (without Runtime Checks)\n";
     usage += "      - Reflective inject requires selfLoading() entrypoint in DLL and be self loading\n";
     usage += "      - CreateRemoteThread denied via KernelCallbacks in EDR procs\n";
-    usage += "      - HijackThread denied by CET (shadow stacks)\n";
 
     if (argc > 1 && strcmp(argv[1], "-h") == 0) {
         std::cout << usage;
