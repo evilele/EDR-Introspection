@@ -897,17 +897,18 @@ LOADER_RET HijackThread(HANDLE hProcess, HANDLE hThread, LPVOID pRemoteRoutine, 
         }
 
         if (bootstrapVerify.State == BOOTSTRAP_STATE::BS_FINISHED) {
-            if ((bootstrapVerify.Ret == 0) == zeroRetSuccess) {
-                if (debug) printf("[+] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed and returned expected value: 0x%llx\n", bootstrapVerify.Ret);
-            }
-            else {
-                printf("[!] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed but returned unexpected valued: 0x%llx\n", bootstrapVerify.Ret);
-            }
-
             // when finished, do cleanup
             if (pRemoteRoutine) VirtualFreeEx(hProcess, pRemoteRoutine, 0, MEM_RELEASE);
             if (pRemoteBootstrapShellcode) VirtualFreeEx(hProcess, pRemoteBootstrapShellcode, 0, MEM_RELEASE);
-            return successful;
+
+            if ((bootstrapVerify.Ret == 0) == zeroRetSuccess) {
+                if (debug) printf("[+] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed and returned expected value: 0x%llx\n", bootstrapVerify.Ret);
+                return successful;
+            }
+            else {
+                printf("[!] Injector-Hijack: BootstrapShellcode and supplied routine successfully executed but returned unexpected value: 0x%llx\n", bootstrapVerify.Ret);
+                return failed;
+            }
         }
         // else loop until timeout
     }
@@ -1240,19 +1241,22 @@ LOADER_RET ExecuteDllLoader(HANDLE hProcess, Executor exec, LPVOID lpStartAddres
 
         DWORD exitCode = 0;
         if (GetExitCodeThread(hThread, &exitCode)) {
+            CloseHandle(hThread);
             if ((exitCode == 0) == zeroRetSuccess) {
                 if (debug) printf("[+] Injector-Exeuctor: Remote thread returned expected value: 0x%lx\n", exitCode);
+                return successful;
             }
             else {
-                printf("[!] Injector-Executor: Remote thread returned unexpected valued: 0x%lx\n", exitCode);
+                printf("[!] Injector-Executor: Remote thread returned unexpected value: 0x%lx\n", exitCode);
+                return failed;
             }
         }
         else {
+            CloseHandle(hThread);
             printf("[!] Injector-Executor: Cannot get exit code for remote thread\n");
+			return failed;
         }
 
-        CloseHandle(hThread);
-        return successful;
     }
 
     else if (exec == THREADLESS_INJECTION) {
