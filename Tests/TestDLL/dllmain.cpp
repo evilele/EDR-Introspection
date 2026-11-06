@@ -7,6 +7,8 @@
 
 #include <TraceLoggingProvider.h>
 
+#pragma comment(lib, "detours.lib")
+
 // etw stuff
 TRACELOGGING_DEFINE_PROVIDER(
     g_hProvider,
