@@ -384,6 +384,7 @@ FodyWeavers.xsd
 !/x64/Release/TestEXE.exe
 !/x64/Release/Tests.exe
 !/x64/Release/TestDLL.dll
+!/x64/Release/TestSectionSigning.exe
 !/x64/Release/FileCopier.dll
 
 
