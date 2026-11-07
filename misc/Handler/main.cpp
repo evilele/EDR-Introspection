@@ -235,7 +235,7 @@ int main() {
     printf("[*] Handle Inspector started\n");
 
     PPROCESS_HANDLE_SNAPSHOT_INFORMATION localHandles;
-    if (getLocalHandles(&localHandles)) {
+    if (!getLocalHandles(&localHandles)) {
         printf("[!] Unable to query local process for handles\n");
         return 1;
     }
