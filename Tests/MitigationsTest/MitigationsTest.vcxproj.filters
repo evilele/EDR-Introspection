@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="OnlyMsSigned.cpp">
+    <ClCompile Include="mitigations.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
