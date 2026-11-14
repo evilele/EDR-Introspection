@@ -13,3 +13,4 @@ BOOL UnloadViaThread(DWORD pid, const std::string dllName);
 BOOL UnloadViaSignal(DWORD pid, const std::string dllName);
 HANDLE FindProcHandle(DWORD pid, BOOL debug);
 void PrintGrantedAccess(HANDLE h, DWORD pid);
+DWORD GetChildProcessId(HANDLE hParentProcess);
