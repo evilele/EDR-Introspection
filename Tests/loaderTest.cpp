@@ -152,7 +152,7 @@ public:
         hPProcess = pi.hProcess;
 
         // open a handle to the child process (even if already exited)
-        DWORD startTime = GetTickCount64(); // and also poll for startup
+        DWORD64 startTime = GetTickCount64(); // and also poll for startup
         do {
             pid = GetChildProcessId(hPProcess);
             if (pid != 0) break;
@@ -353,12 +353,6 @@ TEST_CASE("MitigationsTest: Verify Mitigations and Signing Levels", "[mitigation
         MitigationsTestProcess p;
         REQUIRE(p.Start("n", "a", "n") == 0);
         REQUIRE(InjectDll(p.pid, testDllPath, NULL, LOADLIBRARY_INJECTION, THREADLESS_INJECTION, false, debug) == true);
-        // TODO, this does not fully work, debug
-        /*
-        [!] Injector-Threadless: Failed to read back original hooked function, likely something wrong with the remote process
-        [-] Injector-Threadless: No sign of threadless loader execution, leave hook in place but exit here
-        [=] Injector-LoadLibrary: Threadless did not load 'C:\Users\hacker\source\repos\evilele\EDR-Introspection\x64\Release\TestDLL.dll' into remote process 20648 (yet)
-        */
     }
 
     SECTION("Check ACG mitigations with HostMapped and CreateRemoteThread") {
